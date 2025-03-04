@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Éditeur de Localisation GPS EXIF</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/piexifjs/1.0.6/piexif.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .left-panel, .right-panel {
+            flex: 1;
+            min-width: 300px;
+        }
+        #map {
+            height: 400px;
+            width: 100%;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .image-preview {
+            max-width: 100%;
+            max-height: 400px;
+            display: block;
+            margin: 20px auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .panel {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="file"], input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .drop-area {
+            border: 2px dashed #3498db;
+            border-radius: 8px;
+            padding: 30px 20px;
+            text-align: center;
+            background-color: #f8f9fa;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+        .drop-area:hover, .drop-area.dragover {
+            background-color: #e3f2fd;
+            border-color: #2980b9;
+        }
+        .drop-area p {
+            margin: 5px 0;
+            color: #7f8c8d;
+        }
+        .drop-area input[type="file"] {
+            display: block;
+            width: 200px;
+            margin: 15px auto 0;
+            cursor: pointer;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        .coords-display {
+            font-family: monospace;
+            background-color: #ecf0f1;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .info-text {
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+        #searchBox {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        .message {
+            padding: 10px 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <h1>Éditeur de Localisation GPS EXIF</h1>
+    
+    <div class="container">
+        <div class="left-panel">
+            <div class="panel">
+                <div class="input-group">
+                    <label for="imageInput">Importer une Image:</label>
+                    <div id="dropArea" class="drop-area">
+                        <p>Glisser & déposer une image JPEG ici</p>
+                        <p>- ou -</p>
+                        <input type="file" id="imageInput" accept="image/jpeg,image/jpg">
+                    </div>
+                    <p class="info-text">Remarque: Seules les images JPEG sont supportées car elles peuvent stocker des données EXIF.</p>
+                </div>
+                
+                <div id="originalExifPanel" style="display: none;">
+                    <h3>Données GPS EXIF Originales</h3>
+                    <div id="originalExifData" class="coords-display">Aucune donnée GPS trouvée</div>
+                </div>
+                
+                <img id="imagePreview" class="image-preview" style="display: none;">
+            </div>
+        </div>
+        
+        <div class="right-panel">
+            <div class="panel">
+                <div class="input-group">
+                    <label for="searchBox">Rechercher un Lieu:</label>
+                    <input type="text" id="searchBox" placeholder="Entrez un lieu à rechercher">
+                    <button id="searchButton">Rechercher</button>
+                </div>
+                
+                <div id="map"></div>
+                
+                <div class="input-group">
+                    <label>Coordonnées Sélectionnées:</label>
+                    <div id="selectedCoords" class="coords-display">Aucun lieu sélectionné</div>
+                </div>
+                
+                <button id="applyButton" disabled>Appliquer la Localisation GPS</button>
+                <button id="downloadButton" disabled>Télécharger l'Image Modifiée</button>
+                
+                <div id="message" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const imageInput = document.getElementById('imageInput');
+        const imagePreview = document.getElementById('imagePreview');
+        const originalExifPanel = document.getElementById('originalExifPanel');
+        const originalExifData = document.getElementById('originalExifData');
+        const selectedCoords = document.getElementById('selectedCoords');
+        const applyButton = document.getElementById('applyButton');
+        const downloadButton = document.getElementById('downloadButton');
+        const searchBox = document.getElementById('searchBox');
+        const searchButton = document.getElementById('searchButton');
+        const messageDiv = document.getElementById('message');
+        
+        // Variables to store data
+        let currentImage = null;
+        let currentExif = null;
+        let selectedLatLng = null;
+        let map = null;
+        let marker = null;
+        
+        // Initialize the map
+        function initMap() {
+            // Create map with default view of world center
+            map = L.map('map').setView([0, 0], 2);
+            
+            // Add OpenStreetMap tile layer
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            
+            // Add a dedicated marker layer for location selection
+            const markerLayer = L.layerGroup().addTo(map);
+            
+            // Add click event to map with improved handling
+            map.on('click', function(e) {
+                // Set the location without triggering a map drag
+                e.originalEvent.stopPropagation();
+                
+                // Set the location with the clicked coordinates
+                setSelectedLocation(e.latlng.lat, e.latlng.lng);
+                
+                // Prevent the map from interpreting this as the start of a drag
+                map._draggable._enabled = true;
+            });
+        }
+        
+        // Set the selected location
+        function setSelectedLocation(lat, lng) {
+            selectedLatLng = { lat, lng };
+            
+            // Update the coordinates display
+            selectedCoords.textContent = `Latitude: ${lat.toFixed(6)}, Longitude: ${lng.toFixed(6)}`;
+            
+            // Update or create the marker
+            if (marker) {
+                marker.setLatLng([lat, lng]);
+            } else {
+                marker = L.marker([lat, lng], {
+                    draggable: true,  // Make marker draggable for fine-tuning
+                    autoPan: true     // Pan map when marker is dragged to edge
+                }).addTo(map);
+                
+                // Update coordinates when marker is dragged
+                marker.on('dragend', function(event) {
+                    const position = marker.getLatLng();
+                    setSelectedLocation(position.lat, position.lng);
+                });
+            }
+            
+            // Don't automatically center the map when a location is chosen by clicking
+            // This prevents disorienting map movements
+            
+            // Enable the apply button if an image is loaded
+            if (currentImage) {
+                applyButton.disabled = false;
+            }
+        }
+        
+        // Convert decimal degrees to DMS (degrees, minutes, seconds) for EXIF
+        function decimalToDMS(decimal) {
+            const absolute = Math.abs(decimal);
+            const degrees = Math.floor(absolute);
+            const minutesNotTruncated = (absolute - degrees) * 60;
+            const minutes = Math.floor(minutesNotTruncated);
+            const seconds = (minutesNotTruncated - minutes) * 60;
+            
+            return {
+                degrees: degrees,
+                minutes: minutes,
+                seconds: seconds
+            };
+        }
+        
+        // Convert DMS to rational values for EXIF
+        function dmsToRational(dms) {
+            return [
+                [dms.degrees, 1],
+                [dms.minutes, 1],
+                [Math.round(dms.seconds * 10000), 10000]
+            ];
+        }
+        
+        // Convert decimal GPS to EXIF format
+        function gpsToExifFormat(latitude, longitude) {
+            const latDMS = decimalToDMS(latitude);
+            const lngDMS = decimalToDMS(longitude);
+            
+            return {
+                GPSLatitudeRef: latitude >= 0 ? "N" : "S",
+                GPSLatitude: dmsToRational(latDMS),
+                GPSLongitudeRef: longitude >= 0 ? "E" : "W",
+                GPSLongitude: dmsToRational(lngDMS),
+                GPSVersionID: [2, 2, 0, 0]
+            };
+        }
+        
+        // Extract GPS data from EXIF and convert to decimal
+        function extractGpsData(exifData) {
+            if (!exifData || !exifData["GPS"]) {
+                return null;
+            }
+            
+            try {
+                const gps = exifData["GPS"];
+                
+                // Check if GPS data exists
+                if (!gps[piexif.GPSIFD.GPSLatitude] || !gps[piexif.GPSIFD.GPSLongitude]) {
+                    return null;
+                }
+                
+                // Extract latitude
+                const latRef = gps[piexif.GPSIFD.GPSLatitudeRef];
+                const latArray = gps[piexif.GPSIFD.GPSLatitude];
+                let latitude = latArray[0][0] / latArray[0][1] + 
+                              (latArray[1][0] / latArray[1][1]) / 60 + 
+                              (latArray[2][0] / latArray[2][1]) / 3600;
+                
+                if (latRef === "S") latitude = -latitude;
+                
+                // Extract longitude
+                const lngRef = gps[piexif.GPSIFD.GPSLongitudeRef];
+                const lngArray = gps[piexif.GPSIFD.GPSLongitude];
+                let longitude = lngArray[0][0] / lngArray[0][1] + 
+                               (lngArray[1][0] / lngArray[1][1]) / 60 + 
+                               (lngArray[2][0] / lngArray[2][1]) / 3600;
+                
+                if (lngRef === "W") longitude = -longitude;
+                
+                return { latitude, longitude };
+            } catch (e) {
+                console.error("Error extracting GPS data:", e);
+                return null;
+            }
+        }
+        
+        // Display a message
+        function showMessage(text, type) {
+            messageDiv.textContent = text;
+            messageDiv.className = `message ${type}`;
+            messageDiv.style.display = "block";
+            
+            // Hide after 5 seconds
+            setTimeout(() => {
+                messageDiv.style.display = "none";
+            }, 5000);
+        }
+        
+        // Handle image upload
+        imageInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            // Check if file is JPEG
+            if (!file.type.match('image/jpeg') && !file.type.match('image/jpg')) {
+                showMessage("Veuillez télécharger une image JPEG. Les autres formats ne prennent pas en charge les données EXIF.", "error");
+                return;
+            }
+            
+            // Store the original file for later processing
+            const originalFile = file;
+            
+            // First read as ArrayBuffer to preserve binary data
+            const binaryReader = new FileReader();
+            binaryReader.onload = function(event) {
+                const arrayBuffer = event.target.result;
+                
+                // Convert ArrayBuffer to binary string for piexif
+                const binaryString = new Uint8Array(arrayBuffer).reduce(
+                    (data, byte) => data + String.fromCharCode(byte), ''
+                );
+                
+                // Create base64 data URL
+                const base64String = btoa(binaryString);
+                const dataURL = `data:${file.type};base64,${base64String}`;
+                
+                // Store the image data
+                currentImage = dataURL;
+                
+                // Display image preview
+                imagePreview.src = dataURL;
+                imagePreview.style.display = "block";
+                
+                try {
+                    // Extract EXIF data
+                    currentExif = piexif.load(dataURL);
+                    
+                    // Extract GPS data if available
+                    const gpsData = extractGpsData(currentExif);
+                    
+                    if (gpsData) {
+                        // Display original GPS data
+                        originalExifData.textContent = `Latitude: ${gpsData.latitude.toFixed(6)}, Longitude: ${gpsData.longitude.toFixed(6)}`;
+                        originalExifPanel.style.display = "block";
+                        
+                        // Set the map to the current GPS location
+                        map.setView([gpsData.latitude, gpsData.longitude], 13);
+                        
+                        // Create or update marker
+                        if (marker) {
+                            marker.setLatLng([gpsData.latitude, gpsData.longitude]);
+                        } else {
+                            marker = L.marker([gpsData.latitude, gpsData.longitude]).addTo(map);
+                        }
+                        
+                        // Update selected coordinates
+                        setSelectedLocation(gpsData.latitude, gpsData.longitude);
+                    } else {
+                        originalExifData.textContent = "No GPS data found";
+                        originalExifPanel.style.display = "block";
+                        
+                        // Reset map view if no GPS data
+                        if (selectedLatLng) {
+                            map.setView([selectedLatLng.lat, selectedLatLng.lng], map.getZoom());
+                        } else {
+                            map.setView([0, 0], 2);
+                            selectedCoords.textContent = "Aucun lieu sélectionné";
+                            applyButton.disabled = true;
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error reading EXIF:", error);
+                    showMessage("Erreur de lecture des données EXIF de l'image. Essai avec une approche plus simple...", "error");
+                    
+                    // Attempt to initialize with minimal EXIF structure
+                    currentExif = {
+                        "0th": {},
+                        "Exif": {},
+                        "GPS": {},
+                        "1st": {},
+                        "thumbnail": null
+                    };
+                    
+                    originalExifData.textContent = "Aucune donnée EXIF lisible";
+                    originalExifPanel.style.display = "block";
+                }
+                
+                // Enable apply button if location is selected
+                if (selectedLatLng) {
+                    applyButton.disabled = false;
+                }
+            };
+            
+            binaryReader.readAsArrayBuffer(file);
+        });
+        
+        // Apply GPS location to image
+        applyButton.addEventListener('click', function() {
+            if (!currentImage || !selectedLatLng) {
+                showMessage("Veuillez télécharger une image et sélectionner un lieu d'abord.", "error");
+                return;
+            }
+            
+            try {
+                // If no EXIF data exists, create a new one
+                if (!currentExif) {
+                    currentExif = {
+                        "0th": {},
+                        "Exif": {},
+                        "GPS": {},
+                        "1st": {},
+                        "thumbnail": null
+                    };
+                }
+                
+                // Ensure we have the basic EXIF structure
+                if (!currentExif["0th"]) currentExif["0th"] = {};
+                if (!currentExif["Exif"]) currentExif["Exif"] = {};
+                if (!currentExif["GPS"]) currentExif["GPS"] = {};
+                
+                // Set basic EXIF data to ensure compatibility
+                currentExif["0th"][piexif.ImageIFD.Make] = "GPS Location Editor";
+                currentExif["0th"][piexif.ImageIFD.Software] = "EXIF GPS Location Editor";
+                
+                // Add date if not present
+                if (!currentExif["Exif"][piexif.ExifIFD.DateTimeOriginal]) {
+                    const now = new Date();
+                    const dateString = now.getFullYear() + ":" + 
+                        String(now.getMonth() + 1).padStart(2, '0') + ":" + 
+                        String(now.getDate()).padStart(2, '0') + " " + 
+                        String(now.getHours()).padStart(2, '0') + ":" + 
+                        String(now.getMinutes()).padStart(2, '0') + ":" + 
+                        String(now.getSeconds()).padStart(2, '0');
+                    currentExif["Exif"][piexif.ExifIFD.DateTimeOriginal] = dateString;
+                }
+                
+                // Generate GPS data
+                const gpsData = gpsToExifFormat(selectedLatLng.lat, selectedLatLng.lng);
+                
+                // Update EXIF GPS data
+                currentExif["GPS"] = {
+                    [piexif.GPSIFD.GPSVersionID]: gpsData.GPSVersionID,
+                    [piexif.GPSIFD.GPSLatitudeRef]: gpsData.GPSLatitudeRef,
+                    [piexif.GPSIFD.GPSLatitude]: gpsData.GPSLatitude,
+                    [piexif.GPSIFD.GPSLongitudeRef]: gpsData.GPSLongitudeRef,
+                    [piexif.GPSIFD.GPSLongitude]: gpsData.GPSLongitude,
+                    // Add additional GPS tags for better compatibility
+                    [piexif.GPSIFD.GPSMapDatum]: "WGS-84",
+                    [piexif.GPSIFD.GPSDateStamp]: new Date().toISOString().split('T')[0].replace(/-/g, ":")
+                };
+                
+                // Generate new EXIF data
+                const exifBytes = piexif.dump(currentExif);
+                
+                // Insert EXIF into JPEG
+                const newImageData = piexif.insert(exifBytes, currentImage);
+                
+                // Update current image with new data
+                currentImage = newImageData;
+                
+                // Update image preview
+                imagePreview.src = newImageData;
+                
+                // Enable download button
+                downloadButton.disabled = false;
+                
+                showMessage("La localisation GPS a été appliquée avec succès à l'image !", "success");
+            } catch (error) {
+                console.error("Error applying GPS data:", error);
+                showMessage("Erreur lors de l'application des données GPS à l'image.", "error");
+            }
+        });
+        
+        // Download the modified image
+        downloadButton.addEventListener('click', function() {
+            if (!currentImage) {
+                showMessage("Aucune image modifiée disponible pour le téléchargement.", "error");
+                return;
+            }
+            
+            // Convert data URL to Blob to ensure all EXIF data is preserved
+            const byteString = atob(currentImage.split(',')[1]);
+            const mimeString = currentImage.split(',')[0].split(':')[1].split(';')[0];
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            
+            for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+            }
+            
+            const blob = new Blob([ab], {type: mimeString});
+            const url = URL.createObjectURL(blob);
+            
+            // Create a download link
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = "modified_image.jpg";
+            
+            // Trigger download
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Clean up the object URL
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 100);
+        });
+        
+        // Search for a location
+        searchButton.addEventListener('click', function() {
+            const searchTerm = searchBox.value.trim();
+            if (!searchTerm) return;
+            
+            // Simple geocoding using Nominatim
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchTerm)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        const result = data[0];
+                        const lat = parseFloat(result.lat);
+                        const lng = parseFloat(result.lon);
+                        
+                        // Update map and selected location
+                        map.setView([lat, lng], 13);
+                        setSelectedLocation(lat, lng);
+                    } else {
+                        showMessage("Lieu non trouvé. Veuillez essayer un autre terme de recherche.", "error");
+                    }
+                })
+                .catch(error => {
+                    console.error("Error searching location:", error);
+                    showMessage("Erreur lors de la recherche du lieu.", "error");
+                });
+        });
+        
+        // Allow pressing Enter in search box
+        searchBox.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchButton.click();
+            }
+        });
+        
+        // Setup drag and drop functionality
+        function setupDragAndDrop() {
+            const dropArea = document.getElementById('dropArea');
+            const fileInput = document.getElementById('imageInput');
+            
+            // Prevent default drag behaviors
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, preventDefaults, false);
+                document.body.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            // Highlight drop area when item is dragged over it
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropArea.addEventListener(eventName, highlight, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, unhighlight, false);
+            });
+            
+            // Handle dropped files
+            dropArea.addEventListener('drop', handleDrop, false);
+            
+            // Clicking on the drop area should trigger file input
+            dropArea.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            function highlight() {
+                dropArea.classList.add('dragover');
+            }
+            
+            function unhighlight() {
+                dropArea.classList.remove('dragover');
+            }
+            
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    // Trigger change event to process the file
+                    const event = new Event('change');
+                    fileInput.dispatchEvent(event);
+                }
+            }
+        }
+        
+        // Initialize map and drag-drop when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            setupDragAndDrop();
+        });
+    </script>
+</body>
+</html>
